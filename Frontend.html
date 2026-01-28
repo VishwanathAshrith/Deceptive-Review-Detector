@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fake Review Detection — Masterpiece UI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap');
+    :root{
+      --glass: rgba(255,255,255,0.72);
+      --glass-2: rgba(255,255,255,0.06);
+      --accent1: #06b6d4; /* cyan */
+      --accent2: #7c3aed; /* violet */
+    }
+    html,body{height:100%;}
+    body{
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      margin:0; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      background: radial-gradient(1200px 600px at 10% 10%, rgba(124,58,237,0.12), transparent 10%),
+                  radial-gradient(1000px 500px at 90% 90%, rgba(6,182,212,0.08), transparent 8%),
+                  url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1950&q=80') center/cover no-repeat fixed;
+      color:#0f172a;
+    }
+    /* subtle animated overlay */
+    .bg-overlay{position:fixed;inset:0;pointer-events:none;mix-blend-mode:soft-light;opacity:.9}
+    .blob{position:fixed;border-radius:999px;filter:blur(60px);opacity:.45;transform:translate3d(0,0,0);animation:float 12s ease-in-out infinite;z-index:0}
+    .blob.a{width:520px;height:520px;left:-120px;top:-60px;background:linear-gradient(45deg,var(--accent2),#f59e0b);animation-delay:0s}
+    .blob.b{width:380px;height:380px;right:-100px;bottom:-80px;background:linear-gradient(45deg,var(--accent1),#60a5fa);animation-delay:4s}
+    @keyframes float{0%{transform:translateY(0) scale(1)}50%{transform:translateY(-30px) scale(1.03)}100%{transform:translateY(0) scale(1)}}
+
+    /* header */
+    header{position:relative;z-index:10}
+    .hero-title{
+      font-weight:900; font-size:clamp(2rem,4vw,3.25rem); line-height:1; letter-spacing:-0.02em;
+      background:linear-gradient(90deg,var(--accent1),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent;
+      text-align:center; text-shadow:0 6px 28px rgba(12,14,20,0.08);
+    }
+    .title-badge{display:inline-block;padding:.35rem .65rem;border-radius:999px;background:rgba(255,255,255,0.12);backdrop-filter:blur(6px);box-shadow:0 6px 30px rgba(2,6,23,0.18);font-weight:700;margin-bottom:.85rem}
+
+    /* container */
+    .container{max-width:1100px;margin:0 auto;padding:4rem 2rem;position:relative;z-index:20}
+
+    /* card */
+    .glass{
+      background: linear-gradient(180deg, rgba(255,255,255,0.84), rgba(255,255,255,0.78));
+      border: 1px solid rgba(255,255,255,0.6);
+      box-shadow: 0 10px 40px rgba(8,15,30,0.12);
+      border-radius: 16px; padding:1.25rem;
+      backdrop-filter: blur(10px) saturate(120%);
+    }
+    .card-lg{padding:2rem;border-radius:20px}
+
+    /* inputs */
+    .textarea-fancy{width:100%;min-height:140px;padding:1rem;border-radius:12px;border:1px solid rgba(12,14,20,0.06);box-shadow:inset 0 1px 0 rgba(255,255,255,0.8);font-size:1rem}
+    .btn-primary{display:inline-flex;align-items:center;gap:.6rem;padding:.7rem 1.05rem;border-radius:12px;background:linear-gradient(90deg,var(--accent1),var(--accent2));color:white;font-weight:700;box-shadow:0 10px 30px rgba(12,15,40,0.18);border:none;cursor:pointer}
+    .btn-ghost{padding:.6rem .95rem;border-radius:10px;background:transparent;border:1px solid rgba(255,255,255,0.06);cursor:pointer}
+
+    /* file input */
+    .file-label{display:flex;align-items:center;gap:1rem;padding:.9rem;border-radius:12px;border:1px dashed rgba(12,14,20,0.06);background:linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.86))}
+    .file-label input{display:none}
+
+    /* table */
+    .table-wrap{overflow:auto;border-radius:10px}
+    table{width:100%;border-collapse:collapse;font-size:.95rem}
+    th,td{padding:.9rem;border-bottom:1px solid rgba(12,14,20,0.04)}
+    th{font-size:.78rem;text-transform:uppercase;color:rgba(2,6,23,0.6);letter-spacing:.08em}
+
+    /* badge */
+    .tag-g{background:rgba(34,197,94,0.12);color:#166534;padding:.35rem .6rem;border-radius:999px;font-weight:700}
+    .tag-r{background:rgba(239,68,68,0.08);color:#7f1d1d;padding:.35rem .6rem;border-radius:999px;font-weight:700}
+
+    /* footer */
+    footer{margin-top:4rem;text-align:center;color:rgba(2,6,23,0.6);font-size:.9rem}
+
+    /* responsive tweaks */
+    @media (min-width:1024px){
+      .split{display:grid;grid-template-columns:1fr 420px;gap:2rem;align-items:start}
+    }
+
+    /* small interactive nicety */
+    .pill-stats{display:inline-flex;gap:1.25rem;align-items:center}
+    .stat{background:linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.82));border-radius:999px;padding:.5rem 1rem;box-shadow:0 6px 18px rgba(10,12,20,0.06);font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="bg-overlay"></div>
+  <div class="blob a"></div>
+  <div class="blob b"></div>
+
+  <header class="container">
+    <div class="title-badge">Project • Frontend Masterpiece</div>
+    <h1 class="hero-title">Deceptive Product Review Detector</h1>
+    <p class="text-center" style="opacity:.85;margin-top:.6rem;"></p>
+  </header>
+
+  <main class="container">
+    <section class="glass card-lg split">
+      <div>
+        <h3 style="font-weight:800;margin-bottom:.6rem">Check a Single Review</h3>
+        <p style="margin-bottom:1rem;color:rgba(2,6,23,0.6)">Paste a review and get a fast judgment from your model.</p>
+
+        <form id="predict-form" class="space-y-4" onsubmit="return false;">
+          <textarea id="review-text" class="textarea-fancy" placeholder="Type or paste a review here..."></textarea>
+          <div class="flex items-center gap-4">
+            <button id="predict-btn" class="btn-primary">Predict</button>
+            <button id="clear-btn" class="btn-ghost">Clear</button>
+            <div style="margin-left:auto" class="pill-stats">
+              <div class="stat" id="live-status">Data:<span style="color:var(--accent2);margin-left:.4rem">CSV</span></div>
+            </div>
+          </div>
+        </form>
+
+        <div id="predict-result" style="margin-top:1rem;display:none;padding:1rem;border-radius:12px;background:linear-gradient(90deg,rgba(255,255,255,0.96),rgba(255,255,255,0.92));box-shadow:0 8px 30px rgba(9,10,25,0.06);font-weight:800"></div>
+
+        <div style="margin-top:1.25rem;display:flex;gap:.75rem;flex-wrap:wrap">
+          <div style="font-size:.9rem;color:rgba(2,6,23,0.6)">Tip: The model expects short-to-medium length reviews for best accuracy.</div>
+        </div>
+      </div>
+
+      <aside>
+        <div style="display:flex;flex-direction:column;gap:.75rem">
+          <div class="glass" style="padding:.85rem">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:.8rem;color:rgba(2,6,23,0.6)">Summary</div>
+                <div style="font-weight:800;font-size:1.1rem">Batch & Single</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:.9rem;color:rgba(2,6,23,0.45)">Version</div>
+                <div style="font-weight:800">v1.0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass" style="padding:.75rem">
+            <div style="font-size:.85rem;font-weight:800">Quick Actions</div>
+            <div style="margin-top:.6rem;display:flex;flex-direction:column;gap:.45rem">
+              <button id="demo-btn" class="btn-ghost">Run Demo Batch</button>
+              <button id="theme-btn" class="btn-ghost">Swap Background</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section style="margin-top:2.25rem">
+      <div class="glass" style="padding:1.25rem">
+        <h3 style="font-weight:800;margin-bottom:.6rem">Check a Batch of Reviews (CSV)</h3>
+        <p style="color:rgba(2,6,23,0.6);margin-bottom:1rem">Upload a CSV where the first column is the review text. The UI will parse and show predictions.</p>
+        <div id="filePreviewContainer" style="display:none; margin-top:15px;">
+  <div style="background:#f8fafc;border:1px solid #d1d5db;border-radius:10px;padding:12px;box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div id="fileDisplay" style="font-weight:600;color:#1f2937;font-size:15px;"></div>
+      <button id="clearFilePreview" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px;">Clear</button>
+    </div>
+    <div id="filePreview" style="margin-top:8px;font-family:monospace;font-size:13px;max-height:150px;overflow:auto;background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e5e7eb;"></div>
+  </div>
+</div>
+
+        <form id="upload-form" class="space-y-4" onsubmit="return false;">
+          <label class="file-label" for="file-upload">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10l5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 5v14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div style="flex:1">
+              <div style="font-weight:700">Choose a CSV</div>
+              <div style="font-size:.85rem;color:rgba(2,6,23,0.6)">No file chosen</div>
+            </div>
+            <input id="file-upload" type="file" accept=".csv" />
+          </label>
+
+          <div style="display:flex;gap:.7rem;align-items:center">
+            <button id="upload-btn" class="btn-primary">Upload</button>
+            <button id="analyze-btn" class="btn-primary">Analyze CSV</button>
+            <button id="download-btn" class="btn-ghost">Download Results</button>
+            <div style="margin-left:auto;display:flex;gap:.6rem;align-items:center">
+              <div class="tag-g" id="genuine-count">Genuine: 0</div>
+              <div class="tag-r" id="deceptive-count">Deceptive: 0</div>
+            </div>
+          </div>
+
+        </form>
+
+        <div style="margin-top:1rem" class="table-wrap">
+          <table id="results-table" class="shadow-sm">
+            <thead>
+              <tr>
+                <th style="text-align:left">Review</th>
+                <th style="width:150px;text-align:left">Prediction</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Crafted with intent — See through the noise and detect fake reviews, make smarter  decisions
+    </footer>
+  </main>
+<script>
+const reviewText = document.getElementById('review-text');
+const predictBtn = document.getElementById('predict-btn');
+const clearBtn = document.getElementById('clear-btn');
+const predictResult = document.getElementById('predict-result');
+const liveStatus = document.getElementById('live-status');
+
+const uploadForm = document.getElementById('upload-form');
+const fileInput = document.getElementById('file-upload');
+const tableBody = document.querySelector('#results-table tbody');
+const genuineCountEl = document.getElementById('genuine-count');
+const deceptiveCountEl = document.getElementById('deceptive-count');
+
+const demoBtn = document.getElementById('demo-btn');
+const themeBtn = document.getElementById('theme-btn');
+
+let currentResults = [];
+
+// ---------- SINGLE REVIEW ----------
+predictBtn.addEventListener('click', async () => {
+  const text = reviewText.value.trim();
+  if (!text) return alert('Enter a review');
+
+  predictResult.style.display = 'block';
+  predictResult.textContent = 'Analyzing…';
+  liveStatus.innerHTML = 'Model: <span style="color:#f59e0b;margin-left:.4rem">Thinking</span>';
+
+  try {
+    const res = await fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ review: text })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const pred = data.prediction;
+    predictResult.textContent = pred;
+    predictResult.style.color = pred === 'Deceptive' ? '#991b1b' : '#065f46';
+    predictResult.style.background = pred === 'Deceptive' ? 'linear-gradient(90deg,#fee2e2,#fff)' : 'linear-gradient(90deg,#dcfce7,#fff)';
+    liveStatus.innerHTML = `Model: <span style="color:${pred === 'Deceptive' ? '#ef4444' : '#10b981'};margin-left:.4rem;font-weight:800">Ready</span>`;
+  } catch (err) {
+    predictResult.textContent = 'Error: ' + err.message;
+    liveStatus.innerHTML = 'Model: <span style="color:#ef4444;margin-left:.4rem">Error</span>';
+  }
+});
+
+clearBtn.addEventListener('click', () => {
+  reviewText.value = '';
+  predictResult.style.display = 'none';
+});
+
+// ---------- BATCH UPLOAD ----------
+// Show filename immediately when file is selected
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const filenameDiv = document.querySelector('.file-label div:nth-child(2) > div:nth-child(2)');
+  
+  if (file) {
+    filenameDiv.innerHTML = `✓ ${file.name}`;
+    filenameDiv.style.color = '#10b981'; // Green checkmark
+    filenameDiv.style.fontWeight = '600';
+  } else {
+    filenameDiv.textContent = 'No file chosen';
+    filenameDiv.style.color = 'rgba(2,6,23,0.6)';
+    filenameDiv.style.fontWeight = '400';
+  }
+});
+
+uploadForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const file = fileInput.files[0];
+  if (!file) return alert('Choose a CSV first.');
+
+  // Setup clear button
+  document.getElementById("clearFilePreview").onclick = () => {
+    fileInput.value = "";
+    const filenameDiv = document.querySelector('.file-label div:nth-child(2) > div:nth-child(2)');
+    filenameDiv.textContent = 'No file chosen';
+    filenameDiv.style.color = 'rgba(2,6,23,0.6)';
+    filenameDiv.style.fontWeight = '400';
+    document.getElementById("filePreviewContainer").style.display = "none";
+  };
+
+  // ---------- ANALYZE CSV ----------
+document.getElementById('analyze-btn').addEventListener('click', async () => {
+  if (!currentResults || currentResults.length === 0) {
+    alert('Please upload a CSV file first.');
+    return;
+  }
+  // Results are already loaded from upload, just enable download
+  document.getElementById('download-btn').disabled = false;
+  document.getElementById('download-btn').style.opacity = '1';
+});
+
+// ---------- DOWNLOAD RESULTS ----------
+document.getElementById('download-btn').addEventListener('click', () => {
+  if (!currentResults || currentResults.length === 0) {
+    alert('No results to download. Please upload and analyze a CSV first.');
+    return;
+  }
+
+  let csv = 'Review,Prediction\n';
+  currentResults.forEach(r => {
+    const review = r.review.replace(/"/g, '""');
+    csv += `"${review}","${r.prediction}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `review_results_${new Date().getTime()}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+});
+
+  // --- Upload to backend ---
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    currentResults = data.reviews;
+    renderResults(currentResults);
+    genuineCountEl.textContent = `Genuine: ${data.genuine_count}`;
+    deceptiveCountEl.textContent = `Deceptive: ${data.deceptive_count}`;
+  } catch (err) {
+    alert('Upload error: ' + err.message);
+  }
+});
+
+function renderResults(rows) {
+  tableBody.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.review}</td>
+      <td style="font-weight:800;color:${r.prediction === 'Deceptive' ? '#991b1b' : '#047857'}">${r.prediction}</td>`;
+    tableBody.appendChild(tr);
+  });
+}
+
+
+// ---------- QUICK ACTIONS ----------
+function showOnlyDeceptive() {
+    currentResults.forEach((r, i) => {
+        const tr = tableBody.children[i];
+        if (tr) {
+            tr.style.display = r.prediction === 'Deceptive' ? '' : 'none';
+        }
+    });
+}
+
+
+function clearResults() {
+  tableBody.innerHTML = '';
+  genuineCountEl.textContent = 'Genuine: 0';
+  deceptiveCountEl.textContent = 'Deceptive: 0';
+  currentResults = [];
+}
+
+function exportDeceptive() {
+  if (!currentResults.length) {
+    currentResults = Array.from(tableBody.querySelectorAll('tr')).map(tr => ({
+      review: tr.children[0].textContent.trim(),
+      prediction: tr.children[1].textContent.trim()
+    }));
+  }
+
+  const decRows = currentResults.filter(r => r.prediction === 'Deceptive');
+  if (!decRows.length) return alert('No deceptive reviews to export.');
+
+  let csv = 'Review,Prediction\n';
+  decRows.forEach(r => {
+    csv += `"${r.review.replace(/"/g, '""')}","${r.prediction}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'deceptive_reviews.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+// Attach quick action buttons
+const quickPanel = demoBtn.parentElement;
+['showOnlyDeceptive','clearResults','exportDeceptive'].forEach(id=>{
+  const btn = document.createElement('button');
+  btn.className = 'btn-ghost';
+  if(id==='showOnlyDeceptive'){ btn.textContent='Show Only Deceptive'; btn.onclick=showOnlyDeceptive; }
+  if(id==='clearResults'){ btn.textContent='Clear Results'; btn.onclick=clearResults; }
+  if(id==='exportDeceptive'){ btn.textContent='Export Deceptive'; btn.onclick=exportDeceptive; }
+  quickPanel.appendChild(btn);
+});
+
+// ---------- DEMO BATCH ----------
+demoBtn.addEventListener('click', async () => {
+  try {
+    const demoCsv = new Blob(
+      [
+        "review\n" +
+        "This product is amazing, I use it every day!\n" +
+        "Terrible, broke within 2 days. Waste of money!\n" +
+        "Best purchase ever, highly recommended!\n" +
+        "Awful experience, don't buy this.\n" +
+        "Excellent build quality and fast delivery.\n" +
+        "Horrible, looks nothing like the picture.\n"
+      ],
+      { type: "text/csv" }
+    );
+
+    const formData = new FormData();
+    formData.append("file", demoCsv, "demo.csv");
+
+    const response = await fetch("/upload", {
+      method: "POST",
+      body: formData
+    });
+
+    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+    const result = await response.json();
+    showResults(result);
+  } catch (error) {
+    console.error("Demo batch error:", error);
+    alert("Demo batch error: " + error.message);
+  }
+});
+
+function showResults(data) {
+    currentResults = data.reviews;
+    renderResults(currentResults);
+    genuineCountEl.textContent = `Genuine: ${data.genuine_count}`;
+    deceptiveCountEl.textContent = `Deceptive: ${data.deceptive_count}`;
+
+    // ----- SECRET INTERNAL FLIP FOR TESTING -----
+    const flippedResults = currentResults.map(r => ({
+        review: r.review,
+        prediction: r.prediction === 'Deceptive' ? 'Genuine' : 'Deceptive'
+    }));
+    console.log("Flipped results (internal use only):", flippedResults);
+}
+// ---------- SWAP BACKGROUND ----------
+themeBtn.addEventListener('click', () => {
+  document.body.classList.toggle('dark-theme');
+  if(document.body.classList.contains('dark-theme')){
+    document.body.style.background = '#1e1e2f';
+  } else {
+    document.body.style.background = 'radial-gradient(1200px 600px at 10% 10%, rgba(124,58,237,0.12), transparent 10%), radial-gradient(1000px 500px at 90% 90%, rgba(6,182,212,0.08), transparent 8%), url("https://images.unsplash.com/photo-1519389950473-47ba0277781c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1950&q=80") center/cover no-repeat fixed';
+  }
+});
+</script>
+</body>
+</html>
